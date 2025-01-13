@@ -220,3 +220,4 @@ media/
 # Environment variables
 .env
 
+celerybeat-schedule.db
