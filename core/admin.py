@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Court, Membership, Reservation, Payment
+from .models import Court, Membership, Reservation, Payment, UserProfile
 
 @admin.register(Court)
 class CourtAdmin(admin.ModelAdmin):
@@ -26,3 +26,10 @@ class PaymentAdmin(admin.ModelAdmin):
     list_filter = ('payment_type', 'status', 'created_at')
     search_fields = ('reservation__user__username', 'notes')
     date_hierarchy = 'created_at'
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'phone', 'membership', 'membership_expiry')
+    list_filter = ('membership',)
+    search_fields = ('user__username', 'phone')
+    raw_id_fields = ('user', 'membership')
