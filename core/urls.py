@@ -9,7 +9,8 @@ from .views import (
     StripeWebhookView,
     PaymentHistoryView,
     RetryPaymentView,
-    DeletePaymentView
+    DeletePaymentView,
+    ZellePaymentView
 )
 
 router = DefaultRouter()
@@ -28,4 +29,7 @@ urlpatterns = router.urls + [
     path('payments/<int:payment_id>/', 
          DeletePaymentView.as_view(), 
          name='delete-payment'),
+    path('payments/zelle/', 
+         ZellePaymentView.as_view(), 
+         name='zelle-payment'),
 ]

@@ -17,6 +17,9 @@ from django.conf import settings
 import stripe
 from .services import PaymentService, PaymentNotificationService
 from rest_framework.permissions import IsAdminUser
+from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
+from django.urls import reverse
+from django.http import HttpResponseRedirect
 
 class CourtViewSet(viewsets.ModelViewSet):
     queryset = Court.objects.all()
@@ -171,13 +174,11 @@ class ValidatePaymentView(APIView):
             )
 
 class PendingPaymentsView(APIView):
-    permission_classes = [IsAdminUser]
-
     def get(self, request):
         pending_payments = Payment.objects.filter(
-            status='PENDING_VALIDATION'
-        ).select_related('reservation', 'reservation__user')
-        
+            status__in=['PENDING', 'PENDING_VALIDATION'],
+            payment_type__in=['PAGOMOVIL', 'ZELLE']  # Agregamos ZELLE
+        )
         serializer = PaymentSerializer(pending_payments, many=True)
         return Response(serializer.data)
 
@@ -251,3 +252,48 @@ class DeletePaymentView(APIView):
             return Response({
                 'error': 'Pago no encontrado o no puede ser eliminado'
             }, status=status.HTTP_404_NOT_FOUND)
+
+class ZellePaymentView(APIView):
+    renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
+    template_name = 'payments/zelle_payment.html'
+
+    def get(self, request):
+        reservations = Reservation.objects.filter(
+            user=request.user,
+            status='PENDING'
+        )
+        return Response({
+            'reservations': reservations,
+            'payment_types': Payment.PAYMENT_TYPES,
+            'message': request.GET.get('message')  # Para mostrar mensajes
+        })
+
+    def post(self, request):
+        data = request.data.copy()
+        data['status'] = 'PENDING_VALIDATION'
+        data['payment_type'] = 'ZELLE'
+        
+        # Manejar el archivo subido
+        payment_proof = request.FILES.get('payment_proof')
+        if payment_proof:
+            data['payment_proof'] = payment_proof
+        
+        serializer = PaymentSerializer(data=data)
+        if serializer.is_valid():
+            payment = serializer.save()
+            
+            # Notificar a los administradores
+            notification_service = PaymentNotificationService()
+            notification_service.notify_admin_pending_validation(payment)
+            
+            # Redirigir con mensaje de éxito
+            return HttpResponseRedirect(
+                f'{reverse("zelle-payment")}?message=Pago registrado correctamente'
+            )
+        
+        # Si hay errores, mostrar el formulario con los errores
+        return Response({
+            'reservations': Reservation.objects.filter(user=request.user, status='PENDING'),
+            'payment_types': Payment.PAYMENT_TYPES,
+            'errors': serializer.errors
+        })

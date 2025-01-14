@@ -115,11 +115,9 @@ class Reservation(models.Model):
 
 class Payment(models.Model):
     PAYMENT_TYPES = [
-        ('CARD', 'Tarjeta de Crédito'),
-        ('GOOGLEPAY', 'Google Pay'),
-        ('TRANSFER', 'Transferencia Bancaria'),
+        ('CARD', 'Tarjeta'),
         ('PAGOMOVIL', 'Pago Móvil'),
-        ('CASH', 'Efectivo'),
+        ('ZELLE', 'Zelle'),
     ]
     
     BANK_CHOICES = [
@@ -195,12 +193,36 @@ class Payment(models.Model):
     )
     validation_notes = models.TextField(blank=True)
     
+    # Campos específicos para Zelle
+    zelle_email = models.EmailField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Email de la cuenta Zelle que realizó el pago'
+    )
+    zelle_holder = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text='Nombre del titular de la cuenta Zelle'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'Pago'
         verbose_name_plural = 'Pagos'
+
+    def clean(self):
+        super().clean()
+        if self.payment_type == 'ZELLE':
+            if not self.payment_proof:
+                raise ValidationError('La captura de pantalla es requerida para pagos Zelle')
+            if not self.zelle_email:
+                raise ValidationError('El email de Zelle es requerido')
+            if not self.zelle_holder:
+                raise ValidationError('El nombre del titular de Zelle es requerido')
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, verbose_name='Usuario')

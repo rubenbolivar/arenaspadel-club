@@ -1,0 +1,53 @@
+{% extends "rest_framework/base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Pago con Zelle</h2>
+    
+    {% if message %}
+    <div class="alert alert-success">
+        {{ message }}
+    </div>
+    {% endif %}
+    
+    {% if errors %}
+    <div class="alert alert-danger">
+        <ul>
+        {% for field, error in errors.items %}
+            <li>{{ field }}: {{ error.0 }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-group">
+            <label>Reserva</label>
+            <select name="reservation" class="form-control" required>
+                <option value="">Seleccione una reserva</option>
+                {% for reservation in reservations %}
+                <option value="{{ reservation.id }}">{{ reservation }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Monto</label>
+            <input type="number" name="amount" step="0.01" class="form-control" required>
+        </div>
+        <div class="form-group">
+            <label>Comprobante de pago</label>
+            <input type="file" name="payment_proof" class="form-control" required>
+        </div>
+        <div class="form-group">
+            <label>Email de Zelle</label>
+            <input type="email" name="zelle_email" class="form-control" required>
+        </div>
+        <div class="form-group">
+            <label>Titular de la cuenta Zelle</label>
+            <input type="text" name="zelle_holder" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Enviar pago</button>
+    </form>
+</div>
+{% endblock %}

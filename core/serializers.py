@@ -41,46 +41,31 @@ class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
         fields = [
-            'id',
-            'reservation',
-            'amount',
-            'payment_type',
-            'status',
-            'stripe_payment_intent_id',
-            'payment_proof',
-            'bank_reference',
-            'reference_last_digits',
-            'phone_number',
-            'bank',
-            'received_by',
-            'validation_notes',
-            'created_at',
-            'updated_at'
+            'id', 'reservation', 'amount', 'payment_type', 'status',
+            'stripe_payment_intent_id', 'payment_proof',
+            # Campos Pago Móvil
+            'bank_reference', 'reference_last_digits', 'phone_number', 'bank',
+            # Campos Zelle
+            'zelle_email', 'zelle_holder',
+            # Campos administrativos
+            'received_by', 'validation_notes', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['stripe_payment_intent_id', 'status', 'received_by']
+        read_only_fields = ['id', 'status', 'received_by', 'created_at', 'updated_at']
 
     def validate(self, data):
-        payment_type = data.get('payment_type')
-        
-        if payment_type == 'PAGOMOVIL':
-            # Validar campos requeridos para pago móvil
-            if not data.get('reference_last_digits'):
-                raise serializers.ValidationError(
-                    "Los últimos 4 dígitos de referencia son requeridos para pago móvil"
-                )
-            if not data.get('phone_number'):
-                raise serializers.ValidationError(
-                    "El número de teléfono es requerido para pago móvil"
-                )
-            if not data.get('bank'):
-                raise serializers.ValidationError(
-                    "El banco es requerido para pago móvil"
-                )
+        if data.get('payment_type') == 'ZELLE':
             if not data.get('payment_proof'):
                 raise serializers.ValidationError(
-                    "El comprobante de pago es requerido para pago móvil"
+                    'La captura de pantalla es requerida para pagos Zelle'
                 )
-        
+            if not data.get('zelle_email'):
+                raise serializers.ValidationError(
+                    'El email de Zelle es requerido'
+                )
+            if not data.get('zelle_holder'):
+                raise serializers.ValidationError(
+                    'El nombre del titular de Zelle es requerido'
+                )
         return data
 
 class UserSerializer(serializers.ModelSerializer):
