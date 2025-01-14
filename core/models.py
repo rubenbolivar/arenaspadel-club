@@ -74,6 +74,11 @@ class Reservation(models.Model):
     status = models.CharField('Estado', max_length=10, choices=STATUS_CHOICES, default='PENDING')
     created_at = models.DateTimeField('Fecha de creación', auto_now_add=True)
     updated_at = models.DateTimeField('Fecha de actualización', auto_now=True)
+    total_amount = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        default=0.00
+    )
     
     class Meta:
         verbose_name = 'Reserva'
@@ -110,33 +115,92 @@ class Reservation(models.Model):
 
 class Payment(models.Model):
     PAYMENT_TYPES = [
+        ('CARD', 'Tarjeta de Crédito'),
+        ('GOOGLEPAY', 'Google Pay'),
+        ('TRANSFER', 'Transferencia Bancaria'),
+        ('PAGOMOVIL', 'Pago Móvil'),
         ('CASH', 'Efectivo'),
-        ('TRANSFER', 'Transferencia'),
-        ('ONLINE', 'Pago en línea'),
+    ]
+    
+    BANK_CHOICES = [
+        ('BANCO1', 'Banco 1'),
+        ('BANCO2', 'Banco 2'),
+        ('BANCO3', 'Banco 3'),
+        ('BANCO4', 'Banco 4'),
+        ('BANCO5', 'Banco 5'),
     ]
     
     STATUS_CHOICES = [
         ('PENDING', 'Pendiente'),
+        ('PENDING_VALIDATION', 'Pendiente de Validación'),
         ('COMPLETED', 'Completado'),
         ('FAILED', 'Fallido'),
         ('REFUNDED', 'Reembolsado'),
     ]
+
+    reservation = models.ForeignKey(
+        'Reservation',
+        on_delete=models.CASCADE,
+        related_name='payments'
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_type = models.CharField(
+        max_length=20, 
+        choices=PAYMENT_TYPES,
+        default='CARD'
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     
-    reservation = models.ForeignKey(Reservation, verbose_name='Reserva', on_delete=models.CASCADE)
-    amount = models.DecimalField('Monto', max_digits=8, decimal_places=2)
-    payment_type = models.CharField('Tipo de pago', max_length=10, choices=PAYMENT_TYPES)
-    status = models.CharField('Estado', max_length=10, choices=STATUS_CHOICES, default='PENDING')
-    payment_proof = models.ImageField('Comprobante de pago', upload_to='payments/', null=True, blank=True)
-    notes = models.TextField('Notas', blank=True)
-    created_at = models.DateTimeField('Fecha de creación', auto_now_add=True)
-    updated_at = models.DateTimeField('Fecha de actualización', auto_now=True)
+    # Para pagos con Stripe
+    stripe_payment_intent_id = models.CharField(max_length=255, null=True, blank=True)
     
+    # Para transferencias/pago móvil
+    payment_proof = models.ImageField(
+        upload_to='payment_proofs/', 
+        null=True, 
+        blank=True,
+        verbose_name='Comprobante de pago'
+    )
+    bank_reference = models.CharField(max_length=50, null=True, blank=True)
+    
+    # Campos específicos para pago móvil
+    reference_last_digits = models.CharField(
+        max_length=4,
+        null=True,
+        blank=True,
+        verbose_name='Últimos 4 dígitos de referencia'
+    )
+    phone_number = models.CharField(
+        max_length=15,
+        null=True,
+        blank=True,
+        verbose_name='Número de teléfono'
+    )
+    bank = models.CharField(
+        max_length=20,
+        choices=BANK_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name='Banco'
+    )
+    
+    # Para pagos en efectivo y validaciones
+    received_by = models.ForeignKey(
+        'auth.User', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='payments_received',
+        verbose_name='Recibido por'
+    )
+    validation_notes = models.TextField(blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
         verbose_name = 'Pago'
         verbose_name_plural = 'Pagos'
-
-    def __str__(self):
-        return f"{self.reservation} - {self.amount}"
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, verbose_name='Usuario')
@@ -153,24 +217,25 @@ class UserProfile(models.Model):
 
 class Notification(models.Model):
     NOTIFICATION_TYPES = [
-        ('RESERVATION_CREATED', 'Reserva creada'),
-        ('PAYMENT_CONFIRMED', 'Pago confirmado'),
-        ('RESERVATION_REMINDER', 'Recordatorio de reserva'),
-        ('STATUS_CHANGE', 'Cambio de estado'),
+        ('PAYMENT_PENDING', 'Pago Pendiente'),
+        ('PAYMENT_STATUS', 'Estado de Pago'),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='Usuario')
-    type = models.CharField('Tipo', max_length=20, choices=NOTIFICATION_TYPES)
-    title = models.CharField('Título', max_length=100)
-    message = models.TextField('Mensaje')
-    sent_via_whatsapp = models.BooleanField('Enviado por WhatsApp', default=False)
-    sent_via_email = models.BooleanField('Enviado por Email', default=False)
-    created_at = models.DateTimeField('Fecha de creación', auto_now_add=True)
-    
+    user = models.ForeignKey(
+        'auth.User',
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+    type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=100)
+    message = models.TextField()
+    read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
     class Meta:
+        ordering = ['-created_at']
         verbose_name = 'Notificación'
         verbose_name_plural = 'Notificaciones'
-        ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.get_type_display()} - {self.user.username}"
+        return f"{self.title} - {self.user.username}"

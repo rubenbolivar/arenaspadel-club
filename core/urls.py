@@ -1,15 +1,31 @@
-from django.urls import path, include
+from django.urls import path
 from rest_framework.routers import DefaultRouter
-from . import views
+from .views import (
+    ReservationViewSet,
+    CreatePaymentIntentView,
+    MobilePaymentView,
+    PendingPaymentsView,
+    ValidatePaymentView,
+    StripeWebhookView,
+    PaymentHistoryView,
+    RetryPaymentView,
+    DeletePaymentView
+)
 
 router = DefaultRouter()
-router.register(r'courts', views.CourtViewSet)
-router.register(r'memberships', views.MembershipViewSet)
-router.register(r'reservations', views.ReservationViewSet)
-router.register(r'payments', views.PaymentViewSet)
-router.register(r'profiles', views.UserProfileViewSet)
-router.register(r'notifications', views.NotificationViewSet)
+router.register(r'reservations', ReservationViewSet, basename='reservation')
 
-urlpatterns = [
-    path('', include(router.urls)),
-] 
+urlpatterns = router.urls + [
+    path('payments/create-intent/', CreatePaymentIntentView.as_view(), name='create-payment-intent'),
+    path('payments/mobile/', MobilePaymentView.as_view(), name='mobile-payment'),
+    path('payments/pending/', PendingPaymentsView.as_view(), name='pending-payments'),
+    path('payments/<int:payment_id>/validate/', ValidatePaymentView.as_view(), name='validate-payment'),
+    path('payments/webhook/', StripeWebhookView.as_view(), name='stripe-webhook'),
+    path('payments/history/', PaymentHistoryView.as_view(), name='payment-history'),
+    path('payments/<int:payment_id>/retry/', 
+         RetryPaymentView.as_view(), 
+         name='retry-payment'),
+    path('payments/<int:payment_id>/', 
+         DeletePaymentView.as_view(), 
+         name='delete-payment'),
+]

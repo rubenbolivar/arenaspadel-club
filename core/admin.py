@@ -22,10 +22,27 @@ class ReservationAdmin(admin.ModelAdmin):
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
-    list_display = ('reservation', 'amount', 'payment_type', 'status', 'created_at')
-    list_filter = ('payment_type', 'status', 'created_at')
-    search_fields = ('reservation__user__username', 'notes')
-    date_hierarchy = 'created_at'
+    list_display = ['id', 'reservation', 'payment_type', 'amount', 'status', 'created_at']
+    list_filter = ['status', 'payment_type']
+    search_fields = ['reservation__id', 'stripe_payment_intent_id', 'phone_number']
+    
+    fieldsets = (
+        ('Información Básica', {
+            'fields': ('reservation', 'amount', 'payment_type', 'status')
+        }),
+        ('Pago Móvil', {
+            'fields': ('reference_last_digits', 'phone_number', 'bank', 'payment_proof'),
+            'classes': ('collapse',),
+        }),
+        ('Stripe', {
+            'fields': ('stripe_payment_intent_id',),
+            'classes': ('collapse',),
+        }),
+        ('Validación', {
+            'fields': ('received_by', 'validation_notes'),
+            'classes': ('collapse',),
+        }),
+    )
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):

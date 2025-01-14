@@ -14,10 +14,16 @@ from pathlib import Path
 import os
 from datetime import timedelta
 import logging.config
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde .env
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -229,3 +235,12 @@ LOGGING = {
         },
     },
 }
+
+# Stripe settings
+STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY')
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+
+# Debug stripe keys
+print(f"Stripe keys loaded: {STRIPE_PUBLIC_KEY[:6]}...{STRIPE_PUBLIC_KEY[-4:] if STRIPE_PUBLIC_KEY else 'Not found'}")
+print(f"Secret key loaded: {STRIPE_SECRET_KEY[:6]}...{STRIPE_SECRET_KEY[-4:] if STRIPE_SECRET_KEY else 'Not found'}")
