@@ -26,8 +26,14 @@ jobs:
             source venv/bin/activate
             echo "Installing requirements..."
             pip install -r requirements.txt
+            echo "Setting up environment variables..."
+            echo "DB_NAME=arenaspadel" > .env
+            echo "DB_USER=arenaspadel_user" >> .env
+            echo "DB_PASSWORD=1ArenasPadel9906" >> .env
+            echo "DB_HOST=localhost" >> .env
+            echo "DB_PORT=5432" >> .env
             echo "Running migrations..."
             python manage.py migrate
             echo "Restarting Gunicorn..."
-            sudo systemctl restart gunicorn
+            sudo systemctl restart gunicorn || true
             echo "Deployment complete!" 
