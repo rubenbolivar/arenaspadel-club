@@ -1,0 +1,42 @@
+{% extends "rest_framework/base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Confirmar Reserva</h2>
+    
+    {% if error %}
+    <div class="alert alert-danger">
+        {{ error }}
+    </div>
+    {% endif %}
+    
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Detalles de la Reserva</h5>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="court" value="{{ court.id }}">
+                <input type="hidden" name="date" value="{{ date }}">
+                <input type="hidden" name="start_time" value="{{ start_time }}">
+                <input type="hidden" name="end_time" value="{{ end_time }}">
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>Cancha:</strong> {{ court.name }}</p>
+                        <p><strong>Fecha:</strong> {{ date }}</p>
+                        <p><strong>Horario:</strong> {{ start_time }} - {{ end_time }}</p>
+                        <p><strong>Monto:</strong> ${{ total_amount }}</p>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <small>Al confirmar la reserva, serás redirigido al proceso de pago.</small>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Confirmar y Proceder al Pago</button>
+                <a href="{% url 'court-availability' %}" class="btn btn-secondary">Cancelar</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

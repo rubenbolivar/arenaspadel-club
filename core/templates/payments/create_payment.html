@@ -1,0 +1,89 @@
+{% extends "rest_framework/base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Procesar Pago</h2>
+    
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Detalles del Pago</h5>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <p><strong>Cancha:</strong> {{ reservation.court.name }}</p>
+                    <p><strong>Fecha:</strong> {{ reservation.date }}</p>
+                    <p><strong>Horario:</strong> {{ reservation.start_time }} - {{ reservation.end_time }}</p>
+                    <p><strong>Monto a Pagar:</strong> ${{ reservation.total_amount }}</p>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <form id="payment-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="reservation_id" value="{{ reservation.id }}">
+                        <button type="submit" class="btn btn-primary">Pagar Ahora</button>
+                        <a href="{% url 'court-availability' %}" class="btn btn-secondary">Cancelar</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('payment-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    try {
+        const formData = new FormData(this);
+        console.log('Sending data:', {
+            reservation_id: formData.get('reservation_id')
+        });
+        
+        const response = await fetch('/api/payments/create/', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                reservation_id: formData.get('reservation_id')
+            })
+        });
+        
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        
+        if (data.payment_url) {
+            window.location.href = data.payment_url;
+        } else if (data.client_secret) {
+            const stripe = Stripe('{{ stripe_public_key }}');
+            const result = await stripe.confirmPayment({
+                clientSecret: data.client_secret,
+                confirmParams: {
+                    return_url: window.location.origin + '/payment/success/'
+                }
+            });
+            
+            if (result.error) {
+                alert(result.error.message);
+            }
+        } else {
+            alert('Error al procesar el pago. Por favor, intente nuevamente.');
+        }
+        
+    } catch (error) {
+        console.error('Error completo:', error);
+        alert('Error al procesar el pago. Por favor, intente nuevamente.');
+    }
+});
+</script>
+{% endblock %} 

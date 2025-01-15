@@ -1,0 +1,91 @@
+{% extends "rest_framework/base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Disponibilidad de Canchas</h2>
+    
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <label>Cancha:</label>
+            <select id="court-select" class="form-control">
+                {% for court in courts %}
+                <option value="{{ court.id }}">{{ court.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label>Fecha:</label>
+            <input type="date" id="date-select" class="form-control" 
+                   min="{{ today|date:'Y-m-d' }}" 
+                   value="{{ today|date:'Y-m-d' }}">
+        </div>
+        <div class="col-md-4">
+            <button id="check-availability" class="btn btn-primary mt-4">
+                Verificar Disponibilidad
+            </button>
+        </div>
+    </div>
+
+    <div id="availability-results" class="mt-4">
+        <h4>Horarios Disponibles</h4>
+        <div class="row" id="slots-container">
+            {% for slot in available_slots %}
+            <div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">{{ slot.start_time }} - {{ slot.end_time }}</h5>
+                        <button class="btn btn-success">Reservar</button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('check-availability').addEventListener('click', function() {
+    const courtId = document.getElementById('court-select').value;
+    const date = document.getElementById('date-select').value;
+    const container = document.getElementById('slots-container');
+    
+    container.innerHTML = '<div class="col-12"><p class="text-center">Cargando...</p></div>';
+    
+    fetch(`/api/courts/availability/?court=${courtId}&date=${date}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        container.innerHTML = '';
+        
+        if (!data.available_slots || data.available_slots.length === 0) {
+            container.innerHTML = '<div class="col-12"><p class="text-center">No hay horarios disponibles para esta fecha</p></div>';
+            return;
+        }
+        
+        data.available_slots.forEach(slot => {
+            const slotDiv = document.createElement('div');
+            slotDiv.className = 'col-md-3 mb-2';
+            slotDiv.innerHTML = `
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">${slot.start_time} - ${slot.end_time}</h5>
+                        <a href="/api/reservations/create/?court=${courtId}&date=${date}&start_time=${slot.start_time}&end_time=${slot.end_time}" 
+                           class="btn btn-success">Reservar</a>
+                    </div>
+                </div>
+            `;
+            container.appendChild(slotDiv);
+        });
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        container.innerHTML = 
+            `<div class="col-12"><p class="text-center text-danger">Error al cargar la disponibilidad: ${error.message}</p></div>`;
+    });
+});
+</script>
+{% endblock %} 
