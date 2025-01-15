@@ -20,6 +20,12 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
 from django.urls import reverse
 from django.http import HttpResponseRedirect
+from datetime import datetime, timedelta
+from django.utils import timezone
+from rest_framework.decorators import api_view
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404
 
 class CourtViewSet(viewsets.ModelViewSet):
     queryset = Court.objects.all()
@@ -50,31 +56,56 @@ class NotificationViewSet(viewsets.ModelViewSet):
         return Notification.objects.filter(user=self.request.user)
 
 class CreatePaymentIntentView(APIView):
-    serializer_class = PaymentIntentSerializer
-    
+    renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
+    template_name = 'payments/create_payment.html'
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
-        # Para mostrar el formulario HTML
-        return Response({'message': 'Use POST to create a payment intent'})
-    
+        reservation_id = request.query_params.get('reservation')
+        try:
+            reservation = Reservation.objects.get(id=reservation_id)
+            return Response({
+                'reservation': reservation,
+                'amount': reservation.total_amount,
+                'stripe_public_key': settings.STRIPE_PUBLIC_KEY
+            })
+        except Reservation.DoesNotExist:
+            return Response({'error': 'Reserva no encontrada'}, status=404)
+
     def post(self, request):
-        serializer = self.serializer_class(data=request.data)
-        if serializer.is_valid():
-            reservation = serializer.validated_data['reservation']
-            payment_service = PaymentService()
+        try:
+            reservation_id = request.data.get('reservation_id')
+            reservation = Reservation.objects.get(id=reservation_id)
             
-            try:
-                intent = payment_service.create_payment_intent(reservation)
-                return Response({
-                    'client_secret': intent.client_secret,
-                    'publicKey': settings.STRIPE_PUBLIC_KEY,
-                    'amount': str(reservation.total_amount)
-                })
-            except Exception as e:
-                return Response(
-                    {'error': str(e)}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # Crear el PaymentIntent en Stripe
+            stripe.api_key = settings.STRIPE_SECRET_KEY
+            intent = stripe.PaymentIntent.create(
+                amount=int(reservation.total_amount * 100),  # Convertir a centavos
+                currency='usd',
+                metadata={
+                    'reservation_id': reservation.id
+                }
+            )
+            
+            # Guardar el pago en la base de datos
+            Payment.objects.create(
+                reservation=reservation,
+                amount=reservation.total_amount,
+                stripe_payment_intent_id=intent.id,
+                payment_type='STRIPE',
+                status='PENDING'
+            )
+            
+            return Response({
+                'client_secret': intent.client_secret,
+                'payment_url': f'/api/payments/process/{intent.id}/',
+                'reservation_id': reservation_id
+            })
+            
+        except Reservation.DoesNotExist:
+            return Response({'error': 'Reserva no encontrada'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
 
 class StripeWebhookView(APIView):
     def post(self, request):
@@ -297,3 +328,262 @@ class ZellePaymentView(APIView):
             'payment_types': Payment.PAYMENT_TYPES,
             'errors': serializer.errors
         })
+
+class CourtAvailabilityView(APIView):
+    renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
+    template_name = 'courts/availability.html'
+
+    def get(self, request):
+        # Si es una petición AJAX, devolver JSON
+        if request.accepted_renderer.format == 'json':
+            court_id = request.query_params.get('court')
+            date_str = request.query_params.get('date')
+            
+            try:
+                if date_str:
+                    selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                else:
+                    selected_date = timezone.now().date()
+                    
+                reservations = Reservation.objects.filter(
+                    court_id=court_id,
+                    date=selected_date,
+                    status__in=['PENDING', 'CONFIRMED']
+                ).values('start_time', 'end_time')
+                
+                court = Court.objects.get(id=court_id)
+                opening_time = datetime.strptime(str(court.opening_time), '%H:%M:%S').time()
+                closing_time = datetime.strptime(str(court.closing_time), '%H:%M:%S').time()
+                
+                current_time = opening_time
+                available_slots = []
+                
+                while current_time < closing_time:
+                    slot_end = (datetime.combine(selected_date, current_time) + timedelta(hours=1)).time()
+                    
+                    is_available = True
+                    for reservation in reservations:
+                        if (current_time >= reservation['start_time'] and 
+                            current_time < reservation['end_time']) or (
+                            slot_end > reservation['start_time'] and 
+                            slot_end <= reservation['end_time']):
+                            is_available = False
+                            break
+                    
+                    if is_available:
+                        available_slots.append({
+                            'start_time': current_time.strftime('%H:%M'),
+                            'end_time': slot_end.strftime('%H:%M')
+                        })
+                    
+                    current_time = slot_end
+                
+                return Response({
+                    'court_id': court_id,
+                    'date': selected_date,
+                    'available_slots': available_slots
+                })
+                
+            except Court.DoesNotExist:
+                return Response(
+                    {'error': 'Cancha no encontrada'}, 
+                    status=404
+                )
+            except ValueError:
+                return Response(
+                    {'error': 'Formato de fecha inválido. Use YYYY-MM-DD'}, 
+                    status=400
+                )
+        
+        # Si es una petición normal, mostrar el template
+        return Response({
+            'courts': Court.objects.filter(is_active=True),
+            'today': timezone.now().date()
+        })
+
+class CreateReservationView(APIView):
+    renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
+    template_name = 'reservations/create.html'
+    
+    def get(self, request):
+        court_id = request.query_params.get('court')
+        date = request.query_params.get('date')
+        start_time = request.query_params.get('start_time')
+        end_time = request.query_params.get('end_time')
+        
+        try:
+            court = Court.objects.get(id=court_id)
+            total_amount = float(court.price_per_hour)
+            
+            context = {
+                'court': court,
+                'date': date,
+                'start_time': start_time,
+                'end_time': end_time,
+                'total_amount': total_amount
+            }
+            return Response(context)
+        except Court.DoesNotExist:
+            return Response({'error': 'Cancha no encontrada'}, status=404)
+
+    def post(self, request):
+        try:
+            court = Court.objects.get(id=request.POST.get('court'))
+            serializer = ReservationSerializer(data={
+                'court': court.id,
+                'date': request.POST.get('date'),
+                'start_time': request.POST.get('start_time'),
+                'end_time': request.POST.get('end_time'),
+                'user': request.user.id,
+                'status': 'PENDING',
+                'total_amount': float(court.price_per_hour)
+            })
+            
+            if serializer.is_valid():
+                reservation = serializer.save()
+                return redirect(f'/api/payments/create/?reservation={reservation.id}')
+            return Response(serializer.errors, status=400)
+        except Court.DoesNotExist:
+            return Response({'error': 'Cancha no encontrada'}, status=404)
+
+class ProcessPaymentView(APIView):
+    def get(self, request, payment_intent_id):
+        try:
+            # Mantenemos la lógica existente
+            stripe.api_key = settings.STRIPE_SECRET_KEY
+            intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+            
+            # Obtener la reserva
+            payment = Payment.objects.filter(
+                stripe_payment_intent_id=payment_intent_id
+            ).first()
+            
+            if not payment:
+                return Response({
+                    'error': 'Pago no encontrado'
+                }, status=404)
+                
+            reservation = payment.reservation
+            
+            # Devolver datos en formato JSON
+            return Response({
+                'reservation': {
+                    'court': reservation.court.name,
+                    'date': reservation.date.strftime('%d/%m/%Y'),
+                    'start_time': reservation.start_time.strftime('%H:%M'),
+                    'end_time': reservation.end_time.strftime('%H:%M'),
+                    'total_amount': float(reservation.total_amount)
+                },
+                'payment': {
+                    'client_secret': intent.client_secret,
+                    'stripe_public_key': settings.STRIPE_PUBLIC_KEY,
+                    'payment_intent_id': payment_intent_id
+                },
+                'payment_methods': {
+                    'zelle': {
+                        'email': 'payment@arenaspadel.com',
+                        'holder': 'Arenas Padel Club'
+                    },
+                    'pago_movil': {
+                        'phone': '0414-1234567',
+                        'id': 'V-12345678',
+                        'bank': 'Banesco'
+                    }
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=400)
+
+class ConfirmPaymentView(APIView):
+    def post(self, request):
+        try:
+            payment_type = request.data.get('payment_type')
+            payment_intent_id = request.data.get('payment_intent_id')
+            
+            # Validar datos requeridos
+            if not payment_type or not payment_intent_id:
+                return Response({
+                    'error': 'Faltan datos requeridos'
+                }, status=400)
+                
+            # Obtener el pago
+            payment = Payment.objects.filter(
+                stripe_payment_intent_id=payment_intent_id
+            ).first()
+            
+            if not payment:
+                return Response({
+                    'error': 'Pago no encontrado'
+                }, status=404)
+            
+            # Procesar según el tipo de pago
+            if payment_type == 'STRIPE':
+                # Stripe se maneja con webhooks
+                pass
+                
+            elif payment_type == 'ZELLE':
+                payment.payment_type = 'ZELLE'
+                payment.reference_last_digits = request.data.get('reference')[-4:]
+                payment.zelle_email = request.data.get('email')
+                payment.status = 'PENDING_VALIDATION'
+                payment.save()
+                
+            elif payment_type == 'PAGO_MOVIL':
+                payment.payment_type = 'PAGO_MOVIL'
+                payment.reference_last_digits = request.data.get('reference')[-4:]
+                payment.bank = request.data.get('bank')
+                payment.phone_number = request.data.get('phone')
+                payment.status = 'PENDING_VALIDATION'
+                payment.save()
+            
+            return Response({
+                'status': 'success',
+                'message': 'Pago registrado correctamente',
+                'redirect_url': '/payment/success/'
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=400)
+
+@api_view(['GET'])
+def get_courts(request):
+    courts = Court.objects.all()
+    serializer = CourtSerializer(courts, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def check_court_availability(request, court_id):
+    date = request.query_params.get('date')
+    court = get_object_or_404(Court, id=court_id)
+    
+    # Obtener reservas existentes para esa fecha
+    existing_bookings = Reservation.objects.filter(
+        court=court,
+        date=date
+    )
+    
+    # Generar todos los slots disponibles
+    available_slots = generate_available_slots(existing_bookings)
+    
+    return Response(available_slots)
+
+@api_view(['POST'])
+def create_reservation(request):
+    serializer = ReservationSerializer(data=request.data)
+    if serializer.is_valid():
+        reservation = serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+def process_payment(request):
+    payment_serializer = PaymentSerializer(data=request.data)
+    if payment_serializer.is_valid():
+        payment = payment_serializer.save()
+        return Response(payment_serializer.data, status=status.HTTP_201_CREATED)
+    return Response(payment_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
