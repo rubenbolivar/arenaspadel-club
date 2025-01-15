@@ -587,3 +587,31 @@ def process_payment(request):
         payment = payment_serializer.save()
         return Response(payment_serializer.data, status=status.HTTP_201_CREATED)
     return Response(payment_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+def generate_available_slots(existing_bookings):
+    """
+    Genera los slots disponibles para un día, considerando las reservas existentes
+    """
+    # Horario de operación (7am a 11pm)
+    OPENING_HOUR = 7
+    CLOSING_HOUR = 23
+    
+    # Crear lista de todos los slots posibles
+    all_slots = []
+    for hour in range(OPENING_HOUR, CLOSING_HOUR):
+        slot = {
+            'hour': hour,
+            'time': f"{hour:02d}:00",
+            'available': True
+        }
+        all_slots.append(slot)
+    
+    # Marcar slots ocupados
+    for booking in existing_bookings:
+        booking_hour = booking.time.hour
+        for slot in all_slots:
+            if slot['hour'] == booking_hour:
+                slot['available'] = False
+                break
+    
+    return all_slots
