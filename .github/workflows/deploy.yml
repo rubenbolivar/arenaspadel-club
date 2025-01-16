@@ -34,21 +34,26 @@ jobs:
             echo "DB_PORT=5432" >> .env
             echo "STRIPE_PUBLIC_KEY=pk_test_51MeV01HizWn3jHF5ZCGkCFyDwqNdCQaJo5HPaXwRdnDbu2qmiP0Oj2qqzscHU6JcPnpZJlFIbq198XE2sxshKAvb000NH8tlKt" >> .env
             echo "STRIPE_SECRET_KEY=sk_test_51MeV01HizWn3jHF5qBAVXwReGfvUGQpIFTPqWWWtxiSi6b99FDrpHBFXdBzYkIj5p3gKVTWdVd4QNBD9sjTLbDZV00aigyXYo6" >> .env
+
             echo "Running migrations..."
             python manage.py migrate
+
             echo "Configuring Gunicorn service..."
-            echo "[Unit]
-Description=Gunicorn daemon for Arenas Padel
-After=network.target
+            sudo bash -c 'cat > /etc/systemd/system/gunicorn.service << "EOF"
+            [Unit]
+            Description=Gunicorn daemon for Arenas Padel
+            After=network.target
 
-[Service]
-User=root
-Group=www-data
-WorkingDirectory=/var/www/arenaspadel
-ExecStart=/var/www/arenaspadel/venv/bin/gunicorn --workers 3 --bind unix:/var/www/arenaspadel/arenaspadel.sock config.wsgi:application
+            [Service]
+            User=root
+            Group=www-data
+            WorkingDirectory=/var/www/arenaspadel
+            ExecStart=/var/www/arenaspadel/venv/bin/gunicorn --workers 3 --bind unix:/var/www/arenaspadel/arenaspadel.sock config.wsgi:application
 
-[Install]
-WantedBy=multi-user.target" | sudo tee /etc/systemd/system/gunicorn.service
+            [Install]
+            WantedBy=multi-user.target
+            EOF'
+
             echo "Reloading systemd..."
             sudo systemctl daemon-reload
             echo "Starting Gunicorn..."
