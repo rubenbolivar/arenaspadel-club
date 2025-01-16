@@ -32,10 +32,10 @@ jobs:
             echo "DB_PASSWORD=1ArenasPadel9906" >> .env
             echo "DB_HOST=localhost" >> .env
             echo "DB_PORT=5432" >> .env
-            echo "STRIPE_PUBLIC_KEY=pk_test_51MeV01HizWn3jHF5ZCGkCFyDwqNdCQaJo5HPaXwRdnDbu2qmiP0Oj2qqzscHU6JcPnpZJlFIbq198XE2sxshKAvb000NH8tlKt" >> .env
-            echo "STRIPE_SECRET_KEY=sk_test_51MeV01HizWn3jHF5qBAVXwReGfvUGQpIFTPqWWWtxiSi6b99FDrpHBFXdBzYkIj5p3gKVTWdVd4QNBD9sjTLbDZV00aigyXYo6" >> .env
+            echo "STRIPE_PUBLIC_KEY=pk_test_your_key" >> .env
+            echo "STRIPE_SECRET_KEY=sk_test_your_key" >> .env
             echo "Running migrations..."
             python manage.py migrate
             echo "Restarting Gunicorn..."
             sudo systemctl restart gunicorn || true
-            echo "Deployment complete!" 
+            echo "Deployment complete!"
