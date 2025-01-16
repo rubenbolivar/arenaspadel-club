@@ -37,8 +37,7 @@ jobs:
             echo "Running migrations..."
             python manage.py migrate
             echo "Configuring Gunicorn service..."
-            sudo tee /etc/systemd/system/gunicorn.service > /dev/null << 'EOF'
-[Unit]
+            echo "[Unit]
 Description=Gunicorn daemon for Arenas Padel
 After=network.target
 
@@ -49,8 +48,7 @@ WorkingDirectory=/var/www/arenaspadel
 ExecStart=/var/www/arenaspadel/venv/bin/gunicorn --workers 3 --bind unix:/var/www/arenaspadel/arenaspadel.sock config.wsgi:application
 
 [Install]
-WantedBy=multi-user.target
-EOF
+WantedBy=multi-user.target" | sudo tee /etc/systemd/system/gunicorn.service
             echo "Reloading systemd..."
             sudo systemctl daemon-reload
             echo "Starting Gunicorn..."
